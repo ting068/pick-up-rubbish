@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>楊喻婷SDGs 不塑永續-淨灘</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+        }
+
+        /* 遊戲主畫面（海灘背景） */
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            /* 柔和的海灘漸層背景，模擬沙灘與海天一色 */
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 45%, #F4D06F 45%, #E5C158 100%);
+        }
+
+        /* 頁首標題 (左上角) */
+        #header-title {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            color: #2C3E50;
+            text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.8);
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        /* 分數與成績面板 (右上角) */
+        #score-board {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        /* 垃圾樣式 */
+        .trash-item {
+            position: absolute;
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.2s, opacity 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: drop-shadow(2px 3px 2px rgba(0,0,0,0.3));
+        }
+
+        .trash-item:hover {
+            transform: scale(1.2) !important;
+        }
+
+        .trash-item.collected {
+            opacity: 0;
+            transform: scale(0) rotate(180deg) !important;
+            pointer-events: none;
+        }
+
+        /* 任務成功通關彈窗 */
+        #victory-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            animation: popIn 0.4s ease-out;
+        }
+
+        .modal-content h2 {
+            font-size: 36px;
+            color: #27ae60;
+            margin-bottom: 15px;
+        }
+
+        .modal-content p {
+            font-size: 20px;
+            color: #555;
+            margin-bottom: 25px;
+        }
+
+        .modal-content button {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .modal-content button:hover {
+            background-color: #219653;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.7); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- 左上角標題 -->
+        <div id="header-title">楊喻婷SDGs 不塑永續-淨灘</div>
+
+        <!-- 右上角分數 -->
+        <div id="score-board">
+            分數: <span id="score">0</span> / <span id="total-score">0</span>
+        </div>
+    </div>
+
+    <!-- 通關訊息視窗 -->
+    <div id="victory-modal">
+        <div class="modal-content">
+            <h2>🎉 任務成功！</h2>
+            <p>恭喜你完成淨灘！獲得總積分：<span id="final-score">0</span> 分</p>
+            <button onclick="nextLevel()">前往下一關</button>
+        </div>
+    </div>
+
+    <script>
+        // 定義垃圾種類與其體積對應的積分、圖示與大小
+        const trashTypes = [
+            { name: '寶特瓶', emoji: '🍾', points: 15, size: '36px' },
+            { name: '紙類餐盒', emoji: '🥡', points: 20, size: '42px' },
+            { name: '塑膠袋', emoji: '🛍️', points: 10, size: '32px' },
+            { name: '保麗龍', emoji: '🧊', points: 25, size: '48px' },
+            { name: '飲料杯', emoji: '🧋', points: 15, size: '38px' },
+            { name: '漂流廢棄物', emoji: '📦', points: 30, size: '50px' }
+        ];
+
+        const totalTrashCount = 50;
+        let currentScore = 0;
+        let maxPossibleScore = 0;
+        let collectedCount = 0;
+
+        const gameContainer = document.getElementById('game-container');
+        const scoreDisplay = document.getElementById('score');
+        const totalScoreDisplay = document.getElementById('total-score');
+        const victoryModal = document.getElementById('victory-modal');
+        const finalScoreDisplay = document.getElementById('final-score');
+
+        // 初始化遊戲
+        function initGame() {
+            gameContainer.querySelectorAll('.trash-item').forEach(el => el.remove());
+            currentScore = 0;
+            maxPossibleScore = 0;
+            collectedCount = 0;
+            scoreDisplay.textContent = currentScore;
+            victoryModal.style.display = 'none';
+
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+
+            // 限制垃圾分佈在網頁下半部 (Y 軸從 48% 到 90%)
+            const minY = screenHeight * 0.48;
+            const maxY = screenHeight * 0.88;
+            const minX = 50;
+            const maxX = screenWidth - 100;
+
+            for (let i = 0; i < totalTrashCount; i++) {
+                // 隨機選擇一種垃圾
+                const trash = trashTypes[Math.floor(Math.random() * trashTypes.length)];
+                maxPossibleScore += trash.points;
+
+                const trashElement = document.createElement('div');
+                trashElement.className = 'trash-item';
+                trashElement.textContent = trash.emoji;
+                trashElement.style.fontSize = trash.size;
+
+                // 隨機座標 (下半部)
+                const randomX = Math.random() * (maxX - minX) + minX;
+                const randomY = Math.random() * (maxY - minY) + minY;
+                
+                // 隨機旋轉角度 0 到 360 度
+                const randomRotation = Math.floor(Math.random() * 360);
+
+                trashElement.style.left = `${randomX}px`;
+                trashElement.style.top = `${randomY}px`;
+                trashElement.style.transform = `rotate(${randomRotation}deg)`;
+
+                // 點擊事件
+                trashElement.addEventListener('click', function() {
+                    if (!trashElement.classList.contains('collected')) {
+                        trashElement.classList.add('collected');
+                        currentScore += trash.points;
+                        scoreDisplay.textContent = currentScore;
+                        collectedCount++;
+
+                        // 檢查是否全部撿完
+                        if (collectedCount === totalTrashCount) {
+                            setTimeout(showVictory, 400);
+                        }
+                    }
+                });
+
+                gameContainer.appendChild(trashElement);
+            }
+
+            totalScoreDisplay.textContent = maxPossibleScore;
+        }
+
+        function showVictory() {
+            finalScoreDisplay.textContent = currentScore;
+            victoryModal.style.display = 'flex';
+        }
+
+        function nextLevel() {
+            // 點擊「前往下一關」時重新刷新隨機關卡
+            initGame();
+        }
+
+        // 網頁載入時初始化
+        window.onload = initGame;
+    </script>
+</body>
+</html>
